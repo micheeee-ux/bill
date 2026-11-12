@@ -2,18 +2,32 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- interactive-widget=resizes-content と maximum-scale=1 でキーボード表示時の勝手なパン（座標ズレ）と自動ズームを抑止 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content" />
     <meta name="referrer" content="no-referrer" />
     <title>家計簿</title>
     <style>
-      html, body, .container {
+      html, body {
         margin: 0;
         padding: 0;
         width: 100%;
-        height: 100vh;
+        height: 100%;
+        height: 100dvh;
         overflow: hidden;
+        position: fixed;
+        inset: 0;
         font-family: sans-serif;
         background-color: #f8fafc;
+        overscroll-behavior: none;
+      }
+      .container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        height: 100dvh;
+        overflow: hidden;
       }
       iframe {
         border: none;
@@ -48,7 +62,7 @@
         padding: 10px 12px;
         border: 1px solid #cbd5e1;
         border-radius: 8px;
-        font-size: 13px;
+        font-size: 16px;
         margin-bottom: 12px;
       }
       .setup-guide button {
@@ -60,7 +74,7 @@
         border: none;
         border-radius: 8px;
         cursor: pointer;
-        font-size: 13px;
+        font-size: 14px;
       }
       .error-msg {
         color: #e11d48;
@@ -68,7 +82,6 @@
         margin-bottom: 10px;
         display: none;
       }
-      /* 右下のURL再設定用ミニボタン（長押しまたはクリックでURLクリア） */
       .reset-url-btn {
         position: fixed;
         bottom: 6px;
@@ -90,11 +103,12 @@
     </style>
   </head>
   <body>
-    <div class="container">
+    <div id="iframe-container" class="container">
       <div id="setup-box" class="setup-guide">
         <h2>GAS WebアプリURLの設定（端末保存）</h2>
         <p>
-          デプロイしたGASのURL（<code>https://script.google.com/macros/s/.../exec</code>）を入力してください。<br>
+          初回のみ、デプロイしたGASのURL（<code>https://script.google.com/macros/s/.../exec</code>）を入力してください。<br>
+          URLはこの端末のブラウザ（localStorage）にのみ保存され、GitHub上には公開されません。
         </p>
         <div id="url-error" class="error-msg">有効な Google Apps Script の /exec URL を入力してください。</div>
         <input type="url" id="url-input" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" />
@@ -109,8 +123,30 @@
       const STORAGE_KEY = 'KAKEIBO_GAS_EXEC_URL_V1';
 
       /**
-       * Google Apps Script の正規 /exec URL かどうかを厳密に検証
+       * スマホのソフトウェアキーボード表示・非表示時に
+       * Visual Viewport と親コンテナの座標ズレ（タッチ位置ズレ）を防止する同期処理
        */
+      function syncViewportHeight() {
+        const container = document.getElementById('iframe-container');
+        if (!container) return;
+
+        if (window.visualViewport) {
+          container.style.height = window.visualViewport.height + 'px';
+          container.style.transform = `translateY(${window.visualViewport.offsetTop}px)`;
+        } else {
+          container.style.height = window.innerHeight + 'px';
+        }
+        if (window.scrollY !== 0 || window.scrollX !== 0) {
+          window.scrollTo(0, 0);
+        }
+      }
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncViewportHeight);
+        window.visualViewport.addEventListener('scroll', syncViewportHeight);
+      }
+      window.addEventListener('resize', syncViewportHeight);
+
       function isValidGasUrl(urlStr) {
         try {
           const parsed = new URL(urlStr);
@@ -147,6 +183,7 @@
           resetBtn.style.display = 'none';
           setupBox.style.display = 'block';
         }
+        syncViewportHeight();
       }
 
       function saveAndLoadUrl() {
