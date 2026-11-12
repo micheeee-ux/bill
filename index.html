@@ -1,23 +1,184 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
   <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex">
+    <meta name="referrer" content="no-referrer" />
     <title>家計簿</title>
-    <base target="_top">
     <style>
-      html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
-      iframe { width: 100%; height: 100%; border: none; }
+      html, body, .container {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+        font-family: sans-serif;
+        background-color: #f8fafc;
+      }
+      iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .setup-guide {
+        display: none;
+        max-width: 480px;
+        margin: 60px auto;
+        padding: 24px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        color: #1e293b;
+      }
+      .setup-guide h2 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+      }
+      .setup-guide p {
+        margin: 0 0 16px 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #475569;
+      }
+      .setup-guide input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 12px;
+      }
+      .setup-guide button {
+        width: 100%;
+        padding: 10px;
+        background: #4f46e5;
+        color: #fff;
+        font-weight: bold;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .error-msg {
+        color: #e11d48;
+        font-size: 12px;
+        margin-bottom: 10px;
+        display: none;
+      }
+      /* 右下のURL再設定用ミニボタン（長押しまたはクリックでURLクリア） */
+      .reset-url-btn {
+        position: fixed;
+        bottom: 6px;
+        left: 6px;
+        z-index: 9999;
+        background: rgba(15, 23, 42, 0.4);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 10px;
+        cursor: pointer;
+        opacity: 0.25;
+        transition: opacity 0.2s;
+      }
+      .reset-url-btn:hover {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
-    <iframe id="gasiframe" src="about:blank"></iframe>
+    <div class="container">
+      <div id="setup-box" class="setup-guide">
+        <h2>GAS WebアプリURLの設定（端末保存）</h2>
+        <p>
+          デプロイしたGASのURL（<code>https://script.google.com/macros/s/.../exec</code>）を入力してください。<br>
+        </p>
+        <div id="url-error" class="error-msg">有効な Google Apps Script の /exec URL を入力してください。</div>
+        <input type="url" id="url-input" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" />
+        <button type="button" onclick="saveAndLoadUrl()">保存してアプリを開く</button>
+      </div>
+
+      <iframe id="gasiframe" src="about:blank"></iframe>
+      <button type="button" id="reset-btn" class="reset-url-btn" onclick="clearSavedUrl()" title="接続先GAS URLを再設定">URL変更</button>
+    </div>
+
     <script>
-      window.onload = () => {
-        const originalAppUrl = 'https://script.google.com/macros/s/AKfycbz1uR6kqDdpQTNYknqIjMYHAfOewXLkFEhBGcxaOF6XCvr5tqKWxt4-OR5Vt2BUuI8ogA/exec';
-        const iframe = document.getElementById('gasiframe');
-        iframe.src = originalAppUrl + window.location.search;
-      };
+      const STORAGE_KEY = 'KAKEIBO_GAS_EXEC_URL_V1';
+
+      /**
+       * Google Apps Script の正規 /exec URL かどうかを厳密に検証
+       */
+      function isValidGasUrl(urlStr) {
+        try {
+          const parsed = new URL(urlStr);
+          return (
+            parsed.protocol === 'https:' &&
+            parsed.hostname === 'script.google.com' &&
+            /^\/(a\/[^/]+\/)?macros\/s\/[a-zA-Z0-9_-]+\/exec$/.test(parsed.pathname)
+          );
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function renderIframeState() {
+        const ifm = document.getElementById('gasiframe');
+        const setupBox = document.getElementById('setup-box');
+        const resetBtn = document.getElementById('reset-btn');
+
+        let savedUrl = '';
+        try {
+          savedUrl = localStorage.getItem(STORAGE_KEY) || '';
+        } catch (e) {
+          savedUrl = '';
+        }
+
+        if (isValidGasUrl(savedUrl)) {
+          setupBox.style.display = 'none';
+          ifm.style.display = 'block';
+          resetBtn.style.display = 'block';
+          ifm.src = savedUrl;
+        } else {
+          ifm.src = 'about:blank';
+          ifm.style.display = 'none';
+          resetBtn.style.display = 'none';
+          setupBox.style.display = 'block';
+        }
+      }
+
+      function saveAndLoadUrl() {
+        const inputEl = document.getElementById('url-input');
+        const errEl = document.getElementById('url-error');
+        const val = inputEl ? inputEl.value.trim() : '';
+
+        if (!isValidGasUrl(val)) {
+          errEl.style.display = 'block';
+          return;
+        }
+        errEl.style.display = 'none';
+        try {
+          localStorage.setItem(STORAGE_KEY, val);
+        } catch (e) {
+          document.getElementById('setup-box').style.display = 'none';
+          const ifm = document.getElementById('gasiframe');
+          ifm.style.display = 'block';
+          ifm.src = val;
+          return;
+        }
+        renderIframeState();
+      }
+
+      function clearSavedUrl() {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {}
+        renderIframeState();
+      }
+
+      window.addEventListener('DOMContentLoaded', renderIframeState);
     </script>
   </body>
 </html>
